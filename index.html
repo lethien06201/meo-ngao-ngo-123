@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Monster Arena - Thien Pro Edition v2.1</title>
+    <script src="coi-serviceworker.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --bg: #161512; --panel: rgba(38, 36, 33, 0.95); --accent: #e67e22; --text: #bababa; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding: 10px; display: flex; justify-content: center; overflow: hidden; }
+        .main-wrapper { display: flex; gap: 15px; max-width: 1600px; width: 100%; height: 98vh; }
+
+        #eval-container { width: 45px; height: 700px; background: #222; border-radius: 4px; position: relative; border: 2px solid #333; overflow: hidden; flex-shrink: 0; }
+        #eval-bar { width: 100%; height: 50%; background: #fff; position: absolute; bottom: 0; transition: height 0.3s ease-out; }
+        
+        /* Chỉnh lại css eval-num để javascript dễ điều khiển vị trí */
+        .eval-info { position: absolute; width: 100%; text-align: center; font-size: 12px; font-weight: bold; z-index: 10; pointer-events: none; left: 0; padding: 2px 0; }
+        #eval-num { transition: all 0.2s ease; } 
+        #mat-balance { bottom: 5px; color: #000; font-size: 11px; }
+
+        .board-container { position: relative; width: 700px; height: 700px; flex-shrink: 0; }
+        #board { width: 100%; height: 100%; box-shadow: 0 15px 50px rgba(0,0,0,0.7); }
+        #arrows-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; }
+
+        .highlight-last { box-shadow: inset 0 0 3px 3px rgba(230, 230, 0, 0.6); }
+        .legal-dot { position: relative; }
+        .legal-dot::after { content: ''; width: 25%; height: 25%; background: rgba(0, 0, 0, 0.3); border-radius: 50%; position: absolute; top: 37.5%; left: 37.5%; pointer-events: none; }
+        .legal-capture::after { content: ''; width: 80%; height: 80%; border: 5px solid rgba(0, 0, 0, 0.3); background: transparent; border-radius: 50%; position: absolute; top: 10%; left: 10%; pointer-events: none; box-sizing: border-box; }
+
+        .sidebar { flex: 1; height: 700px; background: var(--panel); border-radius: 8px; display: flex; flex-direction: column; padding: 15px; border: 1px solid #3d3a37; box-sizing: border-box; gap: 10px; position: relative; }
+        #settings-trigger { position: absolute; top: 12px; right: 15px; font-size: 22px; cursor: pointer; z-index: 1000; opacity: 0.6; }
+        
+        #opening-display { font-size: 14px; color: #f1c40f; font-weight: bold; min-height: 24px; }
+        .tabs { display: flex; gap: 5px; margin-right: 40px; }
+        .tab { flex: 1; padding: 8px; border: none; background: #312e2b; color: #888; cursor: pointer; border-radius: 4px; font-size: 11px; font-weight: bold; }
+        .tab.active { background: var(--accent); color: #fff; }
+
+        .box { background: rgba(0,0,0,0.4); border-radius: 4px; border: 1px solid #333; padding: 10px; }
+        .history-box { flex: 1; overflow-y: auto; font-size: 13px; line-height: 1.6; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 4px; }
+        .move-record { cursor: pointer; padding: 2px 5px; border-radius: 3px; }
+        .move-record:hover { background: #555; }
+        .move-record.active-move { background: var(--accent); color: #fff; font-weight: bold; }
+        
+        .nav-buttons { display: flex; gap: 5px; }
+        .nav-btn { flex: 1; padding: 8px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 16px; }
+        .nav-btn:hover { background: var(--accent); }
+
+        .engine-lines { height: 130px; font-family: 'Consolas', monospace; font-size: 11px; color: #2ecc71; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+
+        #chart-container { height: 100px; }
+        .ui-group { display: none; flex-direction: column; gap: 8px; }
+
+        #promo-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1e272e; padding: 20px; border: 4px solid var(--accent); border-radius: 12px; z-index: 99999; text-align: center; }
+        .promo-piece { width: 80px; cursor: pointer; transition: 0.2s; }
+        
+        .btn { padding: 10px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; }
+        .switch-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; background: rgba(255,255,255,0.05); padding: 5px 10px; border-radius: 4px; font-size: 12px; }
+        .setting-row { margin-bottom: 12px; border-bottom: 1px solid #333; padding-bottom: 8px; font-size: 12px;}
+        
+        .theme-green .black-3c85d { background-color: #769656; } .theme-green .white-1e1d7 { background-color: #eeeed2; }
+        .theme-wood .black-3c85d { background-color: #b58863; } .theme-wood .white-1e1d7 { background-color: #f0d9b5; }
+        .theme-dark .black-3c85d { background-color: #555; } .theme-dark .white-1e1d7 { background-color: #999; }
+    </style>
+</head>
+<body class="theme-green">
+    <div id="promo-modal">
+        <h2 style="margin:0 0 15px 0; color:white; font-size:16px;">CHỌN QUÂN PHONG CẤP</h2>
+        <div id="promo-options"></div>
+    </div>
+
+    <div class="main-wrapper">
+        <div id="eval-container">
+            <div id="eval-bar"></div>
+            <div id="eval-num" class="eval-info">0.0</div>
+            <div id="mat-balance" class="eval-info">0</div>
+        </div>
+        
+        <div class="board-container">
+            <div id="board"></div>
+            <svg id="arrows-svg">
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="rgba(230, 126, 34, 0.8)" />
+                    </marker>
+                </defs>
+            </svg>
+        </div>
+
+        <div class="sidebar">
+            <div id="settings-trigger" onclick="$('#settings-panel').fadeToggle(200)">⚙️</div>
+            <div id="opening-display">SẴN SÀNG</div>
+
+            <div class="tabs">
+                <button class="tab active" id="tab-analyze" onclick="switchMode('analyze')">PHÂN TÍCH</button>
+                <button class="tab" id="tab-play" onclick="switchMode('play')">ĐẤU BOT</button>
+                <button class="tab" id="tab-pvp" onclick="switchMode('pvp')">2 NGƯỜI</button>
+            </div>
+
+            <div id="chart-container" class="box">
+                <canvas id="evalChart"></canvas>
+            </div>
+
+            <div id="history-ui" class="box history-box"></div>
+            
+            <div class="nav-buttons">
+                <button class="nav-btn" onclick="navMove('start')">|&lt;</button>
+                <button class="nav-btn" onclick="navMove('prev')">&lt;</button>
+                <button class="nav-btn" onclick="navMove('next')">&gt;</button>
+                <button class="nav-btn" onclick="navMove('end')">&gt;|</button>
+            </div>
+            
+            <div id="analyze-ui" class="box engine-lines"></div>
+
+            <div id="play-ui" class="ui-group">
+                <div class="box" style="background: rgba(230, 126, 34, 0.1);">
+                    <label style="font-size:11px;">Độ khó (Elo): <b id="elo-display" style="color:var(--accent)">250</b></label>
+                    <input type="range" id="elo-range" min="250" max="3653" value="250" step="10" oninput="$('#elo-display').text(this.value); updateElo();" style="width:100%">
+                </div>
+            </div>
+
+            <div style="display:flex; gap:5px;">
+                <button class="btn" style="flex:1; background:#3498db; color:white;" onclick="board.flip(); updateThinking();">🔄 XOAY</button>
+                <button id="btn-auto" class="btn" style="flex:1; background:#f39c12; color:white; display:none;" onclick="toggleAuto()">💡 GỢI Ý</button>
+                <button class="btn" style="flex:1; background:#8e44ad; color:white;" onclick="exportData()">💾 PGN</button>
+                <button class="btn" style="flex:1; background:#27ae60; color:white;" onclick="location.reload()">🆕 MỚI</button>
+            </div>
+
+            <div id="settings-panel" style="display:none; position:absolute; inset:50px 15px 15px 15px; background:#211f1c; z-index:999; padding:20px; border:1px solid var(--accent); border-radius: 8px; overflow-y: auto;">
+                <h3 style="color:var(--accent); margin:0 0 15px 0;">CẤU HÌNH & TÍNH NĂNG</h3>
+                <div class="switch-item"><span>Màu bàn cờ</span>
+                    <select id="board-theme" onchange="document.body.className = 'theme-' + this.value; board.resize();" style="background:#333; color:white; border:none; padding:3px;">
+                        <option value="green">Xanh lá (Chuẩn)</option>
+                        <option value="wood">Vân Gỗ</option>
+                        <option value="dark">Tối Thượng</option>
+                    </select>
+                </div>
+                <div class="switch-item"><span>Tự động phong Hậu (Auto-Queen)</span><input type="checkbox" id="tog-autoqueen"></div>
+                <div class="switch-item"><span>Hiện chấm tròn nước đi</span><input type="checkbox" id="tog-dots" checked></div>
+                <div class="switch-item"><span>Đồ thị lợi thế</span><input type="checkbox" id="tog-chart" checked onchange="$('#chart-container').toggle(this.checked)"></div>
+                
+                <h4 style="color:#888; border-bottom:1px solid #444; padding-bottom:5px;">Engine Cốt Lõi</h4>
+                <div class="setting-row">
+                    <label>Depth: <b id="depth-val">18</b></label>
+                    <input type="range" id="cfg-depth" min="10" max="35" value="18" oninput="$('#depth-val').text(this.value); updateThinking();" style="width:100%">
+                </div>
+                <div class="setting-row">
+                    <label>MultiPV: <b id="line-val">3</b></label>
+                    <input type="range" id="cfg-lines" min="1" max="5" value="3" oninput="$('#line-val').text(this.value); updateMultiPV();" style="width:100%">
+                </div>
+                <button class="btn" style="width:100%; background:var(--accent); color:white;" onclick="$('#settings-panel').fadeOut(200)">LƯU & ĐÓNG</button>
+            </div>
+        </div>
+    </div>
+
+    <audio id="snd-move" src="https://images.chesscomfiles.com/chess-themes/sounds/_standard/default/move-self.mp3"></audio>
+    <audio id="snd-capture" src="https://images.chesscomfiles.com/chess-themes/sounds/_standard/default/capture.mp3"></audio>
+    <audio id="snd-check" src="https://images.chesscomfiles.com/chess-themes/sounds/_standard/default/move-check.mp3"></audio>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+    <script>
+        var board, game = new Chess(), sf = null, currentMode = 'analyze';
+        var autoArrow = false, currentBestMove = null, pendingMove = null;
+        var evalData = [0], evalChart;
+        var gameHistory = [{ fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', san: '', lastMove: null }];
+        var currentPly = 0; 
+
+        function initChart() {
+            const ctx = document.getElementById('evalChart').getContext('2d');
+            evalChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels: ['0'], datasets: [{ label: 'Eval', data: [0], borderColor: '#e67e22', backgroundColor: 'rgba(230, 126, 34, 0.1)', borderWidth: 2, tension: 0.3, pointRadius: 0, fill: true }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { min: -10, max: 10, grid: { color: '#333' } }, x: { display: false } } }
+            });
+        }
+
+        function initEngine() {
+            if (sf) sf.terminate();
+            sf = new Worker('./stockfish-18.js');
+            sf.onmessage = handleEngine;
+            sf.postMessage('uci');
+            updateMultiPV(); updateElo();
+        }
+
+        function getMaterialBalance() {
+            const values = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+            let balance = 0;
+            game.board().forEach(row => { row.forEach(piece => { if (piece) balance += (piece.color === 'w' ? values[piece.type] : -values[piece.type]); }); });
+            return balance;
+        }
+
+        function handleEngine(e) {
+            let msg = e.data;
+            if (msg.includes('multipv 1') && (msg.includes('score cp') || msg.includes('score mate'))) {
+                let cp = 0, mate = 0, isMate = msg.includes('score mate');
+                if (!isMate) cp = parseInt(msg.match(/score cp (-?\d+)/)[1]);
+                else mate = parseInt(msg.match(/score mate (-?\d+)/)[1]);
+
+                let absoluteCP = (game.turn() === 'w') ? cp : -cp;
+                let absoluteMate = (game.turn() === 'w') ? mate : -mate;
+
+                let barPercent = isMate ? (absoluteMate > 0 ? 100 : 0) : 100 / (1 + Math.exp(-0.00368208 * absoluteCP));
+                $('#eval-bar').css('height', barPercent + '%');
+                
+                // Hiển thị số tuyệt đối, không có + hay -, giữ 2 số thập phân
+                let displayNum = isMate ? "M" + Math.abs(absoluteMate) : (Math.abs(absoluteCP) / 100).toFixed(2);
+                $('#eval-num').text(displayNum);
+
+                // Logic nhảy chữ qua vùng lợi thế
+                if (isMate ? absoluteMate > 0 : absoluteCP > 0) {
+                    // Trắng lợi thế: Chữ nhảy xuống vùng trắng, màu đen
+                    $('#eval-num').css({ 'top': 'auto', 'bottom': '22px', 'transform': 'none', 'color': '#000', 'background': 'transparent' });
+                } else if (isMate ? absoluteMate < 0 : absoluteCP < 0) {
+                    // Đen lợi thế: Chữ nhảy lên vùng đen, màu trắng
+                    $('#eval-num').css({ 'bottom': 'auto', 'top': '8px', 'transform': 'none', 'color': '#fff', 'background': 'transparent' });
+                } else {
+                    // Cân bằng (0.00): Nằm chính giữa
+                    $('#eval-num').css({ 'top': '50%', 'bottom': 'auto', 'transform': 'translateY(-50%)', 'color': '#e67e22', 'background': 'rgba(0,0,0,0.6)' });
+                }
+                
+                // Vẫn hiện chênh lệch quân ở đáy (số không có dấu)
+                let mat = getMaterialBalance();
+                $('#mat-balance').text(Math.abs(mat)).css('color', barPercent > 50 ? '#000' : '#fff');
+                if(mat === 0) $('#mat-balance').text(''); // Bằng quân thì ẩn luôn cho đỡ rối
+
+                let chartVal = isMate ? (absoluteMate > 0 ? 10 : -10) : Math.max(-10, Math.min(10, absoluteCP / 100));
+                evalData[currentPly] = chartVal; 
+                evalChart.data.datasets[0].data = evalData.slice(0, currentPly + 1);
+                evalChart.data.labels = Array.from({length: currentPly + 1}, (_, i) => i.toString());
+                evalChart.update('none');
+            }
+
+            if (msg.includes(' pv ')) {
+                let mpv = msg.match(/multipv (\d+)/);
+                if (mpv) {
+                    let idx = mpv[1], pv = msg.match(/ pv (.+)/)[1];
+                    let scoreMatch = msg.match(/score (cp|mate) (-?\d+)/);
+                    let sVal = "...";
+                    if (scoreMatch) {
+                        // Bỏ dấu cộng trừ ở engine lines luôn cho đồng bộ
+                        if (msg.includes('score mate')) sVal = "M" + Math.abs(parseInt(scoreMatch[2]));
+                        else sVal = (Math.abs(parseInt(scoreMatch[2]))/100).toFixed(2);
+                    }
+                    $(`#line-${idx}`).html(`<b style="color:#f1c40f">${sVal}</b> ${uciToSAN(game.fen(), pv)}`);
+                    if (idx == "1") { currentBestMove = pv.split(' ')[0]; manageArrow(); }
+                }
+            }
+
+            if (msg.includes('bestmove') && currentMode === 'play' && game.turn() === 'b' && currentPly === gameHistory.length - 1) {
+                let move = msg.split(' ')[1];
+                makeMove(move.slice(0,2), move.slice(2,4), move[4] || 'q');
+            }
+        }
+
+        function uciToSAN(fen, uci) {
+            let t = new Chess(fen), chain = [], moves = uci.split(' ');
+            for (let m of moves.slice(0, 15)) { 
+                let res = t.move({from: m.slice(0,2), to: m.slice(2,4), promotion: m[4] || 'q'});
+                if (res) chain.push(res.san); else break;
+            }
+            return chain.join(' ');
+        }
+
+        function removeGreySquares() { $('#board .square-55d63').removeClass('legal-dot legal-capture'); }
+        function onMouseoverSquare(square, piece) {
+            if (!$('#tog-dots').is(':checked') || currentPly !== gameHistory.length - 1) return;
+            var moves = game.moves({ square: square, verbose: true });
+            if (moves.length === 0) return;
+            for (var i = 0; i < moves.length; i++) {
+                let target = $('#board .square-' + moves[i].to);
+                if(moves[i].captured) target.addClass('legal-capture');
+                else target.addClass('legal-dot');
+            }
+        }
+        function onMouseoutSquare() { removeGreySquares(); }
+
+        function onDragStart(source, piece, position, orientation) {
+            if (game.game_over()) return false;
+        }
+
+        function onDrop(source, target) {
+            removeGreySquares();
+            let piece = game.get(source);
+            if (piece && piece.type === 'p' && (target[1] === '8' || target[1] === '1')) {
+                if($('#tog-autoqueen').is(':checked')) {
+                    return makeMove(source, target, 'q') ? undefined : 'snapback';
+                }
+                pendingMove = {from: source, to: target};
+                showPromo(piece.color); return 'trash';
+            }
+            return makeMove(source, target, 'q') ? undefined : 'snapback';
+        }
+
+        function showPromo(c) {
+            let html = ['q', 'r', 'b', 'n'].map(p => `<img src="https://cdn.jsdelivr.net/gh/oakmac/chessboardjs@1.0.0/website/img/chesspieces/wikipedia/${c}${p.toUpperCase()}.png" class="promo-piece" onclick="doPromo('${p}')">`).join('');
+            $('#promo-options').html(html); $('#promo-modal').fadeIn(100);
+        }
+        function doPromo(p) { $('#promo-modal').hide(); makeMove(pendingMove.from, pendingMove.to, p); }
+
+        function makeMove(s, t, p) {
+            if (currentPly < gameHistory.length - 1) {
+                gameHistory = gameHistory.slice(0, currentPly + 1);
+                evalData = evalData.slice(0, currentPly + 1);
+            }
+
+            let move = game.move({from: s, to: t, promotion: p});
+            if (move) {
+                if (game.in_check()) document.getElementById('snd-check').play();
+                else if (move.captured) document.getElementById('snd-capture').play();
+                else document.getElementById('snd-move').play();
+                
+                gameHistory.push({ fen: game.fen(), san: move.san, lastMove: {from: s, to: t} });
+                currentPly++;
+                evalData.push(evalData[evalData.length - 1] || 0); 
+                
+                syncUI(); 
+                return true;
+            }
+            return false;
+        }
+
+        function navMove(action) {
+            if (action === 'start') currentPly = 0;
+            else if (action === 'prev' && currentPly > 0) currentPly--;
+            else if (action === 'next' && currentPly < gameHistory.length - 1) currentPly++;
+            else if (action === 'end') currentPly = gameHistory.length - 1;
+            else if (typeof action === 'number') currentPly = action;
+            
+            game.load(gameHistory[currentPly].fen);
+            board.position(gameHistory[currentPly].fen, false); 
+            syncUI(true);
+        }
+
+        function syncUI(isNavigating = false) {
+            if (!isNavigating) board.position(game.fen());
+            
+            $('#board .square-55d63').removeClass('highlight-last');
+            let lm = gameHistory[currentPly].lastMove;
+            if (lm) {
+                $('#board .square-' + lm.from).addClass('highlight-last');
+                $('#board .square-' + lm.to).addClass('highlight-last');
+            }
+
+            let html = "";
+            for (let i = 1; i < gameHistory.length; i++) {
+                if (i % 2 !== 0) html += `<div style="width:100%; display:flex; gap:5px;"><span style="color:#777; width:20px;">${Math.ceil(i/2)}.</span>`;
+                let activeClass = (i === currentPly) ? "active-move" : "";
+                html += `<span class="move-record ${activeClass}" onclick="navMove(${i})">${gameHistory[i].san}</span>`;
+                if (i % 2 === 0 || i === gameHistory.length - 1) html += `</div>`;
+            }
+            $('#history-ui').html(html);
+            if (!isNavigating) $('#history-ui').scrollTop(9999);
+            
+            updateThinking();
+        }
+
+        function exportData() {
+            let pgn = game.pgn();
+            let fen = gameHistory[currentPly].fen;
+            prompt("COPY PGN HOẶC FEN BÊN DƯỚI:\n\nFEN: " + fen + "\n\nPGN:\n", pgn || fen);
+        }
+
+        function switchMode(m) {
+            currentMode = m; 
+            $('.tab').removeClass('active'); $(`#tab-${m}`).addClass('active');
+            $('#play-ui').toggle(m === 'play'); 
+            $('#btn-auto').toggle(m !== 'pvp');
+            if(m === 'play' && board.orientation() === 'black') board.flip();
+            updateThinking();
+        }
+
+        function updateElo() {
+            if (!sf) return;
+            let elo = parseInt($('#elo-range').val());
+            sf.postMessage(`setoption name UCI_LimitStrength value ${currentMode === 'play'}`);
+            if (currentMode === 'play') sf.postMessage('setoption name UCI_Elo value ' + elo);
+        }
+
+        function updateThinking() {
+            if (!sf) return;
+            $('#arrows-svg').empty(); sf.postMessage('stop');
+            sf.postMessage('position fen ' + gameHistory[currentPly].fen);
+            sf.postMessage('go depth ' + $('#cfg-depth').val());
+        }
+
+        function updateMultiPV() {
+            if (!sf) return;
+            sf.postMessage(`setoption name MultiPV value ${$('#cfg-lines').val()}`);
+            let html = "";
+            for(let i=1; i<=$('#cfg-lines').val(); i++) html += `<div id="line-${i}">...</div>`;
+            $('#analyze-ui').html(html);
+            updateThinking();
+        }
+
+function drawArrow(uci) {
+            $('#arrows-svg').empty(); 
+            if (!uci || !$('#tog-lines').is(':checked')) return;
+            const size = 700 / 8, orient = board.orientation() === 'white';
+            const getC = (s) => {
+                let f = s.charCodeAt(0)-97, r = 8-parseInt(s[1]);
+                if (!orient) { f = 7-f; r = 7-r; }
+                return { x: f*size + size/2, y: r*size + size/2 };
+            };
+            let from = getC(uci.slice(0,2)), to = getC(uci.slice(2,4));
+            let arrow = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            arrow.setAttribute("x1", from.x); arrow.setAttribute("y1", from.y);
+            arrow.setAttribute("x2", to.x); arrow.setAttribute("y2", to.y);
+            arrow.setAttribute("stroke", "rgba(230, 126, 34, 0.7)"); arrow.setAttribute("stroke-width", "12");
+            arrow.setAttribute("marker-end", "url(#arrowhead)");
+            $('#arrows-svg').append(arrow);
+        }
+        function manageArrow() { (currentMode === 'analyze' || (currentMode === 'play' && autoArrow)) ? drawArrow(currentBestMove) : $('#arrows-svg').empty(); }
+        function toggleAuto() { autoArrow = !autoArrow; $('#btn-auto').text(autoArrow ? '💡 GỢI Ý (BẬT)' : '💡 GỢI Ý (TẮT)'); manageArrow(); }
+
+        $(document).keydown(function(e) {
+            if (e.keyCode == 37) { navMove('prev'); e.preventDefault(); } 
+            if (e.keyCode == 39) { navMove('next'); e.preventDefault(); } 
+        });
+
+        $(document).ready(() => {
+            board = Chessboard('board', { 
+                draggable: true, 
+                position: 'start', 
+                onDragStart: onDragStart,
+                onDrop: onDrop, 
+                onMouseoutSquare: onMouseoutSquare,
+                onMouseoverSquare: onMouseoverSquare,
+                pieceTheme: 'https://cdn.jsdelivr.net/gh/oakmac/chessboardjs@1.0.0/website/img/chesspieces/wikipedia/{piece}.png' 
+            });
+            initChart(); initEngine();
+            $(window).resize(() => { board.resize(); evalChart.resize(); });
+        });
+    </script>
+</body>
+</html>

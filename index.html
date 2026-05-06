@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Monster Arena - Thien Pro Edition v2.1</title>
+    <title>meongaongo123</title>
     <script src="coi-serviceworker.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -14,7 +14,6 @@
         #eval-container { width: 45px; height: 700px; background: #222; border-radius: 4px; position: relative; border: 2px solid #333; overflow: hidden; flex-shrink: 0; }
         #eval-bar { width: 100%; height: 50%; background: #fff; position: absolute; bottom: 0; transition: height 0.3s ease-out; }
         
-        /* Chỉnh lại css eval-num để javascript dễ điều khiển vị trí */
         .eval-info { position: absolute; width: 100%; text-align: center; font-size: 12px; font-weight: bold; z-index: 10; pointer-events: none; left: 0; padding: 2px 0; }
         #eval-num { transition: all 0.2s ease; } 
         #mat-balance { bottom: 5px; color: #000; font-size: 11px; }
@@ -205,23 +204,17 @@
                 let barPercent = isMate ? (absoluteMate > 0 ? 100 : 0) : 100 / (1 + Math.exp(-0.00368208 * absoluteCP));
                 $('#eval-bar').css('height', barPercent + '%');
                 
-                // Hiển thị số tuyệt đối, không có + hay -, giữ 2 số thập phân
                 let displayNum = isMate ? "M" + Math.abs(absoluteMate) : (Math.abs(absoluteCP) / 100).toFixed(2);
                 $('#eval-num').text(displayNum);
 
-                // Logic nhảy chữ qua vùng lợi thế
                 if (isMate ? absoluteMate > 0 : absoluteCP > 0) {
-                    // Trắng lợi thế: Chữ nhảy xuống vùng trắng, màu đen
                     $('#eval-num').css({ 'top': 'auto', 'bottom': '22px', 'transform': 'none', 'color': '#000', 'background': 'transparent' });
                 } else if (isMate ? absoluteMate < 0 : absoluteCP < 0) {
-                    // Đen lợi thế: Chữ nhảy lên vùng đen, màu trắng
                     $('#eval-num').css({ 'bottom': 'auto', 'top': '8px', 'transform': 'none', 'color': '#fff', 'background': 'transparent' });
                 } else {
-                    // Cân bằng (0.00): Nằm chính giữa
                     $('#eval-num').css({ 'top': '50%', 'bottom': 'auto', 'transform': 'translateY(-50%)', 'color': '#e67e22', 'background': 'rgba(0,0,0,0.6)' });
                 }
                 
-                // Vẫn hiện chênh lệch quân ở đáy (số không có dấu)
                 let mat = getMaterialBalance();
                 $('#mat-balance').text(Math.abs(mat)).css('color', barPercent > 50 ? '#000' : '#fff');
                 if(mat === 0) $('#mat-balance').text(''); // Bằng quân thì ẩn luôn cho đỡ rối
@@ -240,7 +233,7 @@
                     let scoreMatch = msg.match(/score (cp|mate) (-?\d+)/);
                     let sVal = "...";
                     if (scoreMatch) {
-                        // Bỏ dấu cộng trừ ở engine lines luôn cho đồng bộ
+
                         if (msg.includes('score mate')) sVal = "M" + Math.abs(parseInt(scoreMatch[2]));
                         else sVal = (Math.abs(parseInt(scoreMatch[2]))/100).toFixed(2);
                     }
